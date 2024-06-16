@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>QR Code File Transfer</title>
+    <script src="/crypto.js"></script>
+    <script src="/main.js"></script>
+  </head>
+  <body>
+    <button id="open-btn">Open</button>
+    <input id="hid" />
+    <button id="connect-btn">Connect</button>
+
+    <script>
+    document.getElementById('open-btn').addEventListener('click', async () => {
+      const hid = await Host.open();
+      document.getElementById('hid').value = hid;
+      console.log(hid);
+      const d = await Host.accept(hid);
+      if (!d.ok) throw new Error("accept failed");
+      console.log(`connect message: ${d.message}`);
+      await Host.close(hid);
+
+      const { location: loc } = d;
+
+      await Relay.open(loc);
+      const [, body] = await Promise.all([
+        Relay.send(loc, "I'm alice"),
+        Relay.recv(loc),
+      ]);
+
+      const msg = new TextDecoder().decode(await Util.readAll(body));
+
+      console.log(msg);
+    });
+    document.getElementById('connect-btn').addEventListener('click', async () => {
+      const hid = document.getElementById('hid').value;
+      const loc = await Host.connect(hid, 'this is my message');
+
+      await Relay.open(loc);
+      const [, body] = await Promise.all([
+        Relay.send(loc, "I'm bob"),
+        Relay.recv(loc),
+      ]);
+
+      const msg = new TextDecoder().decode(await Util.readAll(body));
+
+      console.log(msg);
+    });
+    </script>
+  </body>
+</html>
