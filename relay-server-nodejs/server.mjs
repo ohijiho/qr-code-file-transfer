@@ -15,7 +15,7 @@ app.use(cookieParser());
 app.use(bodyParser.json({ type: 'application/json' }));
 
 const hostServer = new HostServer(relayers);
-const relayServer = new RelayServer(30000);
+const relayServer = new RelayServer(60000);
 
 app.use((req, res, next) => {
   console.log(req.path);
@@ -29,7 +29,7 @@ app.use((req, res, next) => {
 
 app.post('/api/host/open', (req, res) => {
   try {
-    const hid = hostServer.open(req.cookies[IDENTITY_KEY], new Date().getTime() + 30000);
+    const hid = hostServer.open(req.cookies[IDENTITY_KEY], new Date().getTime() + 60000);
 
     res.json({
       hid,
