@@ -158,7 +158,7 @@ export class LRUMap {
   }
 
   has(key) {
-    return this.#map.hash(key);
+    return this.#map.has(key);
   }
 
   delete(key) {

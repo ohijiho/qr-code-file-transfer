@@ -1,6 +1,6 @@
 import * as uuid from 'uuid';
 import cryptoJs from 'crypto-js';
-import { Queue, LRUMap } from './collections.js';
+import { Queue, LRUMap } from './collections.mjs';
 
 export class HostServer {
   #superKey;
@@ -76,7 +76,7 @@ export class HostServer {
   connect(id, message) {
     const host = this.#getHost(id, this.superKey);
 
-    const location = this.relayers[Math.floor(Math.random() * this.relayers.length)] + uuid.v4();
+    const location = this.genLocation();
 
     host.buf.enqueue({
       location,
@@ -86,6 +86,10 @@ export class HostServer {
     if (!host.listeners.isEmpty())
       host.listeners.dequeue()();
     return location;
+  }
+
+  genLocation() {
+    return this.relayers[Math.floor(Math.random() * this.relayers.length)] + uuid.v4();
   }
 
   prune() {

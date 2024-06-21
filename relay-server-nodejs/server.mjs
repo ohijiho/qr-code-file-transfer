@@ -1,20 +1,18 @@
 import { promisify } from 'util';
+import https from 'https';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import bodyParser from 'body-parser';
 import * as uuid from 'uuid';
-import { HostServer } from './host.js';
-import { RelayServer } from './relay.js';
+import { HostServer } from './host.mjs';
+import { RelayServer } from './relay.mjs';
+import { relayers, httpsOptions, httpsPort, httpPort } from './configs.mjs';
 
 const IDENTITY_KEY = 'identity';
-
-const relayers = ['http://localhost:3000/api/relay/']
 
 const app = express();
 app.use(cookieParser());
 app.use(bodyParser.json({ type: 'application/json' }));
-
-const port = process.env.PORT ?? 3000;
 
 const hostServer = new HostServer(relayers);
 const relayServer = new RelayServer(30000);
@@ -84,6 +82,18 @@ app.post('/api/host/connect/:hid', (req, res) => {
   }
 });
 
+app.post('/api/host/connect', (req, res) => {
+  try {
+    const location = hostServer.genLocation();
+
+    res.json({
+      location,
+    });
+  } catch (e) {
+    handleHostServerError(e, res);
+  }
+});
+
 app.post('/api/relay/:sid/open', (req, res) => {
   try {
     relayServer.open(req.params.sid, req.cookies[IDENTITY_KEY]);
@@ -126,6 +136,17 @@ app.post('/api/relay/:sid/recv', async (req, res) => {
   }
 });
 
+app.get('/api/relay/:sid/closed', (req, res) => {
+  try {
+    const closed = relayServer.isClosed(req.params.sid, req.cookies[IDENTITY_KEY], res);
+    res.json({
+      closed,
+    });
+  } catch (e) {
+    handleRelayServerError(e, res);
+  }
+})
+
 function handleHostServerError(e, res) {
   let status = 500;
   if (e.code === HostServer.ErrorCode.noSuchHost) status = 404;
@@ -150,9 +171,12 @@ function handleRelayServerError(e, res) {
 }
 
 app.use(express.static('../static'));
+app.get('/favicon.ico', (req, res) => {
+  res.end();
+});
 
-app.listen(port, () => {
-  console.log(`listening at port ${port}`);
+https.createServer(httpsOptions, app).listen(httpsPort, () => {
+  console.log(`listening at port ${httpsPort}`);
 });
 
 setInterval(() => {

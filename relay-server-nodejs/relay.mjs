@@ -1,5 +1,5 @@
 import cryptoJs from 'crypto-js';
-import { Queue, LRUMap } from './collections.js';
+import { Queue, LRUMap } from './collections.mjs';
 
 export class RelayServer {
   #timeout;
@@ -72,11 +72,24 @@ export class RelayServer {
 
     sock.closed = true;
 
+    this.#endSock(sock.counter);
+
     this.#checkAndDeleteSock(id, sock);
+  }
+
+  isClosed(id, key) {
+    if (!this.#map.has(id)) return true;
+
+    const { sock } = this.#getSock(id, key);
+
+    return sock.counter.sendQueue.isEmpty() && sock.counter.closed;
   }
 
   async send(id, key, stream) {
     const { conn, sock } = this.#getSock(id, key);
+
+    if (sock.closed)
+      throw new RelayServerError('already closed', RelayServer.ErrorCode.alreadyClosed);
 
     if (sock.counter.recvQueue.isEmpty()) {
       return new Promise((resolve, reject) => {
@@ -104,6 +117,9 @@ export class RelayServer {
 
   async recv(id, key, stream) {
     const { conn, sock } = this.#getSock(id, key);
+
+    if (sock.counter.closed)
+      return;
 
     if (sock.counter.sendQueue.isEmpty()) {
       return new Promise((resolve, reject) => {
@@ -163,11 +179,8 @@ export class RelayServer {
 
   #pipe(send, recv, conn) {
     return new Promise((resolve, reject) => {
+      send.pipe(recv);
       send.on('data', (chunk) => {
-        if (!recv.write(chunk)) {
-          send.pause();
-        }
-
         conn.expires = this.#expires();
         this.#map.use(conn.id);
       });
@@ -175,9 +188,8 @@ export class RelayServer {
         if (conn.canceled) reject(conn.cancelPromise);
         else resolve();
       });
-      recv.on('drain', () => {
-        send.resume();
-      });
+      send.on('error', reject);
+      recv.on('error', reject);
       conn.cancelPromise.then(resolve, reject);
     });
   }
