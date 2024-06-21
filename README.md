@@ -6,5 +6,5 @@ This web service provides file transfer between PC and mobile through end-to-end
 
 1. Go to the web page with your PC.
 2. Scan the QR code with your mobile.
-3. Select file from your PC or mobile whichever you want and send.
+3. Select file from your PC or mobile whichever you want and hit the submit button.
 4. The selected file will be end-to-end encrypted and sent through the relay server.
