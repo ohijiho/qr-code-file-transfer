@@ -89,7 +89,7 @@ export class ControlSocket {
   constructor(loc, dh, pubkey) {
     this.#loc = loc;
     this.#dh = dh;
-    this.#hbTimeout = 15000;
+    this.#hbTimeout = 30000;
     this.#recvFileQueue = new InfiniteBufferedChannel();
     this.#checkPubkey = uint8Array(pubkey);
     this.#fileMap = new Map();

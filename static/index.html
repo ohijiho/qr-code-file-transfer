@@ -4,13 +4,12 @@
     <meta charset="UTF-8">
     <title>QR Code File Transfer</title>
     <script src="/vendor/qrcode.min.js"></script>
-    <script src="https://jimmywarting.github.io/StreamSaver.js/StreamSaver.js?version=2.0.0"></script>
+    <script src="/vendor/StreamSaver.js"></script>
   </head>
   <body>
     <div id="output"></div>
     <form>
-      <input id="input" style="width: 500px;" />
-      <input id="hidden-dummy-input" style="display: none;" />
+      <input type="file" id="input" multiple />
       <input type="submit" />
     </form>
 
@@ -18,13 +17,13 @@
     import {
       textEncoder, textDecoder, base64ToBytes, bytesToBase64, readAll,
     } from '/util.mjs';
+    import { ToUint8ArrayStream } from '/stream.mjs';
     import { DH } from '/crypto.mjs';
     import { Host, Relay } from '/api.mjs';
     import { ControlSocket } from '/main.mjs';
 
     (async () => {
       const input = document.getElementById('input');
-      const hiddenDummyInput = document.getElementById('hidden-dummy-input');
       const output = document.getElementById('output');
 
       document.forms[0].addEventListener('submit', (e) => {
@@ -92,7 +91,12 @@
           };
         }
 
-        return listen();
+        for (;;) {
+          const d = await listen();
+          if (d) {
+            return d;
+          }
+        }
       })();
 
       await Relay.open(loc);
@@ -100,31 +104,30 @@
       const s = new ControlSocket(loc, dh, pk);
       await s.start();
 
-      input.focus();
-
       document.forms[0].addEventListener('submit', async () => {
         if (!loc) return;
 
-        const msg = input.value;
-        hiddenDummyInput.focus();
-        input.focus();
-        input.value = '';
+        const len = input.files.length;
 
-        const { readable, writable } = new TransformStream();
-        const { fileSent, checksumSent } = await s.sendFile({}, readable);
-        const w = writable.getWriter();
-        w.write(textEncoder.encode(msg));
-        w.close();
-        await Promise.all([fileSent, checksumSent]);
+        await Promise.all([...input.files].map(async (file) => {
+          const { fileSent, checksumSent } = await s.sendFile({ name: file.name }, file.stream());
+          await Promise.all([fileSent, checksumSent]);
+        }));
+
+        const text = document.createElement('p');
+        text.innerText = `sent ${len} files`;
+        output.appendChild(text);
       });
 
       for (;;) {
-        const { readable } = await s.recvFile();
-        const b = await readAll(readable);
-        const msg = textDecoder.decode(b);
+        const { metadata, readable } = await s.recvFile();
+
+        const fileStream = streamSaver.createWriteStream(metadata.name);
+
+        readable.pipeThrough(new ToUint8ArrayStream()).pipeTo(fileStream);
 
         const text = document.createElement('p');
-        text.innerText = msg;
+        text.innerText = `receiving file: ${metadata.name}`;
         output.appendChild(text);
       }
     })();

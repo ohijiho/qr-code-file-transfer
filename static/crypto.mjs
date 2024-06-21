@@ -107,7 +107,7 @@ export class Cipher {
 
         for (let i = 0; i < chunk.byteLength; i += chunkSize) {
           const d = await this.encrypt(new Uint8Array(
-            chunk.buffer, chunk.byteOffet + i, Math.min(chunkSize, chunk.byteLength - i)));
+            chunk.buffer, chunk.byteOffset + i, Math.min(chunkSize, chunk.byteLength - i)));
           const lenbuf = new ArrayBuffer(2);
           new DataView(lenbuf).setUint16(0, d.byteLength);
           controller.enqueue(lenbuf);

@@ -143,3 +143,14 @@ export class ChecksumStream {
     return st.writable;
   }
 }
+
+export class ToUint8ArrayStream extends TransformStream {
+  constructor() {
+    super({
+      start() {},
+      transform(chunk, controller) {
+        controller.enqueue(uint8Array(chunk));
+      },
+    });
+  }
+}
