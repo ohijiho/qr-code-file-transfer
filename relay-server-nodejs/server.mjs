@@ -148,6 +148,10 @@ app.get('/api/relay/:sid/closed', (req, res) => {
 })
 
 function handleHostServerError(e, res) {
+  if (res.headersSent) {
+    console.error('error after headers sent', e);
+    return;
+  }
   let status = 500;
   if (e.code === HostServer.ErrorCode.noSuchHost) status = 404;
   else if (e.code === HostServer.ErrorCode.wrongKey) status = 403;
@@ -158,6 +162,10 @@ function handleHostServerError(e, res) {
 }
 
 function handleRelayServerError(e, res) {
+  if (res.headersSent) {
+    console.error('error after headers sent', e);
+    return;
+  }
   let status = 500;
   if (e.code === RelayServer.ErrorCode.noSuchSocket) status = 404;
   else if (e.code === RelayServer.ErrorCode.wrongKey) status = 403;

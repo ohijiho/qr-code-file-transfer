@@ -9,7 +9,7 @@
   <body>
     <div id="output"></div>
     <form>
-      <input type="file" id="input" multiple />
+      <input type="file" id="input" multiple disabled />
       <input type="submit" />
     </form>
 
@@ -17,7 +17,7 @@
     import {
       textEncoder, textDecoder, base64ToBytes, bytesToBase64, readAll,
     } from '/util.mjs';
-    import { ToUint8ArrayStream } from '/stream.mjs';
+    import { ToUint8ArrayStream, ThroughputStream } from '/stream.mjs';
     import { DH } from '/crypto.mjs';
     import { Host, Relay } from '/api.mjs';
     import { ControlSocket } from '/main.mjs';
@@ -25,6 +25,12 @@
     (async () => {
       const input = document.getElementById('input');
       const output = document.getElementById('output');
+
+      function log(msg) {
+        const text = document.createElement('p');
+        text.innerText = msg;
+        output.appendChild(text);
+      }
 
       document.forms[0].addEventListener('submit', (e) => {
         e.preventDefault();
@@ -99,10 +105,16 @@
         }
       })();
 
+      log('connecting...');
+
       await Relay.open(loc);
 
       const s = new ControlSocket(loc, dh, pk);
       await s.start();
+
+      log('established');
+
+      input.disabled = false;
 
       document.forms[0].addEventListener('submit', async () => {
         if (!loc) return;
@@ -114,9 +126,7 @@
           await Promise.all([fileSent, checksumSent]);
         }));
 
-        const text = document.createElement('p');
-        text.innerText = `sent ${len} files`;
-        output.appendChild(text);
+        log(`sent ${len} files`);
       });
 
       for (;;) {
@@ -124,11 +134,16 @@
 
         const fileStream = streamSaver.createWriteStream(metadata.name);
 
-        readable.pipeThrough(new ToUint8ArrayStream()).pipeTo(fileStream);
-
+        log(`receiving file: ${metadata.name}`);
         const text = document.createElement('p');
-        text.innerText = `receiving file: ${metadata.name}`;
         output.appendChild(text);
+
+        readable.
+          pipeThrough(new ThroughputStream(({ size, throughput }) => {
+            text.innerText = `${(size * 1e-6).toFixed(2)}MB, ${(throughput * 1e-6).toFixed(2)}MB/s`;
+          })).
+          pipeThrough(new ToUint8ArrayStream()).
+          pipeTo(fileStream);
       }
     })();
     </script>

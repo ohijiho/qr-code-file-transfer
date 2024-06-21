@@ -44,20 +44,7 @@ export class CipherSocket {
   }
 
   async #recvLoop() {
-    for (;;) {
-      const s = await Relay.recvStream(this.#loc);
-      const oldCnt = this.#cipher.decryptCounter();
-      await s.pipeTo(this.#dec.writable, {
-        preventClose: true,
-      });
-      const newCnt = this.#cipher.decryptCounter();
-      if (taeq(oldCnt, newCnt)) {
-        if (await Relay.isClosed(this.#loc)) {
-          this.#dec.writable.close();
-          return;
-        }
-      }
-    }
+    await new RelayReadableStream(this.#loc).pipeTo(this.#dec.writable);
   }
 
   get writable() {
@@ -245,6 +232,7 @@ export class ControlSocket {
     const cipher = new Cipher(this.#key);
     cipher.initDecrypt(base64ToBytes(d.iv));
     const sock = new CipherSocket(cipher, d.loc);
+    const { ThroughputStream } = await import('/stream.mjs');
     const [s1, s2] = sock.readable.tee();
     const cksumS = new ChecksumStream();
     const cp = s2.pipeTo(cksumS).then(() => cksumS.digest);

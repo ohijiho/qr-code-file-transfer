@@ -1,3 +1,5 @@
+import { uint8Array } from '/util.mjs';
+
 class HTTPError extends Error {
   constructor(res, msg) {
     super(msg ?? `${res.status} ${res.statusText}`);
@@ -75,13 +77,58 @@ export const Relay = {
 };
 
 export class RelayWritableStream extends WritableStream {
-  constructor(loc) {
+  constructor(loc, highWaterMark) {
+    if (!highWaterMark) highWaterMark = 1 << 28;
+    const buf = [];
+    let len = 0;
+    let sig = () => {};
+    let close = false;
+    let ready = () => {};
+    let total = 0;
+    let totN = 0;
+
+    const done = (async () => {
+      while (len || !close) {
+        while (len === 0) {
+          await new Promise((resolve) => {
+            sig = resolve;
+          });
+        }
+
+        const b = new Uint8Array(len);
+        len = 0;
+        let off = 0;
+        for (const x of buf.splice(0, buf.length)) {
+          b.set(x, off);
+          off += x.byteLength;
+        }
+
+        await Relay.send(loc, b);
+
+        ready();
+      }
+
+      await Relay.close(loc);
+    })();
+
     super({
       async write(chunk, controller) {
-        await Relay.send(loc, chunk);
+        chunk = uint8Array(chunk);
+        buf.push(chunk);
+        total += chunk.byteLength;
+        totN++;
+        len += chunk.byteLength;
+        sig();
+        if (len >= highWaterMark) {
+          await new Promise((resolve) => {
+            ready = resolve;
+          });
+        }
       },
       async close(controller) {
-        await Relay.close(loc);
+        close = true;
+        sig();
+        await done;
       },
     });
   }
@@ -91,12 +138,18 @@ export class RelayReadableStream extends ReadableStream {
   constructor(loc) {
     super({
       async pull(controller) {
-        const b = await Relay.recv(loc);
-        if (b.byteLength === 0 && await Relay.isClosed(loc)) {
-          controller.close();
-          return;
+        const s = await Relay.recvStream(loc);
+        const r = s.getReader();
+        let empty = true;
+        for (;;) {
+          const { value, done } = await r.read();
+          if (done) break;
+          controller.enqueue(value);
+          empty = false;
         }
-        controller.enqueue(b);
+        if (empty && await Relay.isClosed(loc)) {
+          controller.close();
+        }
       },
     });
   }

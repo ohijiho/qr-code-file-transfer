@@ -147,7 +147,7 @@ export class Cipher {
           const last = buf[buf.length - 1];
           const left = new Uint8Array(
             last.buffer,
-            last.ByteOffset + last.byteLength + remaining,
+            last.byteOffset + last.byteLength + remaining,
             -remaining);
           buf[buf.length - 1] = new Uint8Array(
             last.buffer,
@@ -163,7 +163,6 @@ export class Cipher {
 
           const d = await this.decrypt(b);
           controller.enqueue(d);
-          const { textDecoder } = await import('/util.mjs');
 
           if (left.byteLength === 0) {
             buf.splice(0, buf.length);

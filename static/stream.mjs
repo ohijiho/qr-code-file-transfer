@@ -115,6 +115,7 @@ class SlicingStream extends TransformStream {
           totalLen -= bs;
           buf.splice(0, buf.length);
         }
+        buf.push(chunk);
       },
       flush(controller) {
         const b = new Uint8Array(totalLen);
@@ -131,7 +132,7 @@ class SlicingStream extends TransformStream {
 
 export class ChecksumStream {
   constructor() {
-    const st = new SlicingStream(1024);
+    const st = new SlicingStream(65536);
     const cw = new ChunkwiseChecksumStream();
     st.readable.pipeTo(cw);
 
@@ -152,5 +153,39 @@ export class ToUint8ArrayStream extends TransformStream {
         controller.enqueue(uint8Array(chunk));
       },
     });
+  }
+}
+
+export class ThroughputStream extends TransformStream {
+  #t0;
+  #size;
+
+  constructor(fn) {
+    super({
+      start: async () => {
+        await Promise.resolve();
+        this.#t0 = new Date().getTime();
+        this.#size = 0;
+      },
+      transform: (chunk, controller) => {
+        controller.enqueue(chunk);
+        this.#size += chunk.byteLength;
+        if (fn) {
+          fn({
+            target: this,
+            size: this.size,
+            throughput: this.throughput,
+          });
+        }
+      },
+    });
+  }
+
+  get size() {
+    return this.#size;
+  }
+
+  get throughput() {
+    return this.#size / (new Date().getTime() - this.#t0) * 1000;
   }
 }
