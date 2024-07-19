@@ -1,5 +1,7 @@
 # qr-code-file-transfer
 
+[Demo](https://ohijiho.github.io/qr-code-file-transfer)
+
 This web service provides file transfer between PC and mobile through end-to-end encrypted channel. The connection can be easily established by scanning the QR code.
 
 ## Usage
