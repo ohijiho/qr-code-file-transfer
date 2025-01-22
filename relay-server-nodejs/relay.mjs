@@ -1,16 +1,23 @@
 import cryptoJs from 'crypto-js';
 import { Queue, LRUMap } from './collections.mjs';
+import { noopLogger } from './util.mjs';
 
 export class RelayServer {
   #timeout;
   #map;
 
-  constructor(timeout) {
+  dbgTotalUnfulfilled;
+  dbgTotalQueued;
+  logger;
+
+  constructor(timeout, opts) {
     this.#timeout = timeout;
     this.#map = new LRUMap();
 
     this.dbgTotalUnfulfilled = 0;
     this.dbgTotalQueued = 0;
+
+    this.logger = opts?.logger ?? noopLogger;
   }
 
   get dbgSocksOpen() {
@@ -33,12 +40,12 @@ export class RelayServer {
         canceled: false,
         cancel: null,
       };
-      conn.cancelPromise = new Promise((resolve, reject) => {
+      conn.cancelPromise = new Promise((_, reject) => {
         conn.cancel = reject;
       }).finally(() => {
         conn.canceled = true;
       });
-      conn.cancelPromise.catch(() => {});
+      conn.cancelPromise.catch(() => { });
       this.#map.set(id, conn);
 
       const sock = {
@@ -145,7 +152,7 @@ export class RelayServer {
     }
   }
 
-  prune() {
+  prune(opts) {
     const now = new Date().getTime();
     while (!this.#map.isEmpty()) {
       const oldest = this.#map.lruValue();
@@ -159,7 +166,7 @@ export class RelayServer {
       }
       this.#deleteSock(oldest.id, [...oldest.socks.values()][0]);
 
-      console.log(`socket closed: ${oldest.id}`);
+      (opts?.logger ?? logger).info(`socket closed: ${oldest.id}`);
     }
   }
 
@@ -172,7 +179,7 @@ export class RelayServer {
     const sock = conn.socks.get(key);
 
     if (!sock)
-      throw new RelayServerError(`wrong key: ${cryptJs.SHA256(key)}`, RelayServer.ErrorCode.wrongKey);
+      throw new RelayServerError(`wrong key: ${cryptoJs.SHA256(key)}`, RelayServer.ErrorCode.wrongKey);
 
     return { conn, sock };
   }
@@ -180,7 +187,7 @@ export class RelayServer {
   #pipe(send, recv, conn) {
     return new Promise((resolve, reject) => {
       send.pipe(recv);
-      send.on('data', (chunk) => {
+      send.on('data', () => {
         conn.expires = this.#expires();
         this.#map.use(conn.id);
       });

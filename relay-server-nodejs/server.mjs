@@ -1,12 +1,14 @@
-import { promisify } from 'util';
 import https from 'https';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import bodyParser from 'body-parser';
 import * as uuid from 'uuid';
+import pino from 'pino';
 import { HostServer } from './host.mjs';
 import { RelayServer } from './relay.mjs';
-import { relayers, httpsOptions, httpsPort, httpPort } from './configs.mjs';
+import { relayers, httpsOptions, httpsPort } from './configs.mjs';
+
+const logger = pino();
 
 const IDENTITY_KEY = 'identity';
 
@@ -14,11 +16,23 @@ const app = express();
 app.use(cookieParser());
 app.use(bodyParser.json({ type: 'application/json' }));
 
-const hostServer = new HostServer(relayers);
-const relayServer = new RelayServer(60000);
+const hostServer = new HostServer(relayers, { logger });
+const relayServer = new RelayServer(60000, { logger });
+
+const noLogPaths = new Set([
+  '/util.mjs',
+  '/stream.mjs',
+  '/crypto.mjs',
+  '/api.mjs',
+  // '/main.mjs',
+  '/vendor/qrcode.min.js',
+  '/vendor/StreamSaver.js',
+  '/favicon.ico',
+]);
 
 app.use((req, res, next) => {
-  console.log(req.path);
+  if (!noLogPaths.has(req.path) || req.url.includes('?'))
+    logger.info(`${req.method} ${req.url}`);
   if (!req.cookies[IDENTITY_KEY]) {
     const identity = uuid.v4();
     req.cookies[IDENTITY_KEY] = identity;
@@ -82,7 +96,7 @@ app.post('/api/host/connect/:hid', (req, res) => {
   }
 });
 
-app.post('/api/host/connect', (req, res) => {
+app.post('/api/host/connect', (_, res) => {
   try {
     const location = hostServer.genLocation();
 
@@ -149,21 +163,21 @@ app.get('/api/relay/:sid/closed', (req, res) => {
 
 function handleHostServerError(e, res) {
   if (res.headersSent) {
-    console.error('error after headers sent', e);
+    logger.error('error after headers sent', e);
     return;
   }
   let status = 500;
   if (e.code === HostServer.ErrorCode.noSuchHost) status = 404;
   else if (e.code === HostServer.ErrorCode.wrongKey) status = 403;
   else {
-    console.error(e);
+    logger.error(e);
   }
   res.sendStatus(status);
 }
 
 function handleRelayServerError(e, res) {
   if (res.headersSent) {
-    console.error('error after headers sent', e);
+    logger.error('error after headers sent', e);
     return;
   }
   let status = 500;
@@ -173,27 +187,42 @@ function handleRelayServerError(e, res) {
   else if (e.code === RelayServer.ErrorCode.alreadyClosed) status = 409;
   else if (e.code === RelayServer.ErrorCode.timeout) status = 418;
   else {
-    console.error(e);
+    logger.error(e);
   }
   res.sendStatus(status);
 }
 
 app.use(express.static('../static'));
-app.get('/favicon.ico', (req, res) => {
+app.get('/favicon.ico', (_, res) => {
   res.end();
 });
 
+function joinAddressAndPort(address, port) {
+  if (address.includes(':')) return `[${address}]:${port}`;
+  return `${address}:${port}`;
+}
+
 https.createServer(httpsOptions, app).listen(httpsPort, () => {
-  console.log(`listening at port ${httpsPort}`);
+  logger.info(`listening at port ${httpsPort}`);
+}).on('connection', (socket) => {
+  logger.info(`Connection established: ${socket.remoteFamily} ${joinAddressAndPort(socket.remoteAddress, socket.remotePort)}`);
 });
 
 setInterval(() => {
   hostServer.prune();
   relayServer.prune();
 
-  console.log(`${hostServer.dbgHostsOpen} hosts are currently open`);
-  console.log(`${hostServer.dbgTotalListeners} listeners are currently waiting`);
-  console.log(`${relayServer.dbgSocksOpen} sockets are currently open`);
-  console.log(`${relayServer.dbgTotalUnfulfilled} relay requests are unfulfilled`);
-  console.log(`${relayServer.dbgTotalQueued} relay requests are queued`);
+  if (hostServer.dbgHostsOpen || hostServer.dbgTotalListeners || hostServer.dbgSocksOpen || hostServer.dbgTotalUnfulfilled || hostServer.dbgTotalQueued) {
+    logger.info(`Garbage collection status:`)
+    if (hostServer.dbgHostsOpen)
+      logger.info(` - ${hostServer.dbgHostsOpen} hosts are currently open`);
+    if (hostServer.dbgTotalListeners)
+      logger.info(` - ${hostServer.dbgTotalListeners} listeners are currently waiting`);
+    if (relayServer.dbgSocksOpen)
+      logger.info(` - ${relayServer.dbgSocksOpen} sockets are currently open`);
+    if (relayServer.dbgTotalUnfulfilled)
+      logger.info(` - ${relayServer.dbgTotalUnfulfilled} relay requests are unfulfilled`);
+    if (relayServer.dbgTotalQueued)
+      logger.info(` - ${relayServer.dbgTotalQueued} relay requests are queued`);
+  }
 }, 60000);

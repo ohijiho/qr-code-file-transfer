@@ -1,19 +1,24 @@
 import * as uuid from 'uuid';
 import cryptoJs from 'crypto-js';
 import { Queue, LRUMap } from './collections.mjs';
+import { noopLogger } from './util.mjs';
 
 export class HostServer {
   #superKey;
   #map;
   #relayers;
 
-  constructor(relayers) {
+  logger;
+
+  constructor(relayers, opts) {
     this.#relayers = relayers;
 
     this.#map = new LRUMap();
     this.#superKey = Symbol();
 
     this.dbgTotalListeners = 0;
+
+    this.logger = opts?.logger ?? noopLogger;
   }
 
   get superKey() {
@@ -28,7 +33,7 @@ export class HostServer {
     return this.#map.size;
   }
 
-  open(key, expires) {
+  open(key, expires, opts) {
     const hid = uuid.v4();
     this.#map.set(hid, {
       hid,
@@ -38,7 +43,7 @@ export class HostServer {
       listeners: new Queue(),
     });
 
-    console.log(`host open: ${hid} (key: ${cryptoJs.SHA256(key)})`);
+    (opts?.logger ?? this.logger).info(`host open: ${hid} (key: ${cryptoJs.SHA256(key)})`);
 
     return hid;
   }
@@ -92,7 +97,7 @@ export class HostServer {
     return this.relayers[Math.floor(Math.random() * this.relayers.length)] + uuid.v4();
   }
 
-  prune() {
+  prune(opts) {
     const now = new Date().getTime();
     while (!this.#map.isEmpty()) {
       const oldest = this.#map.lruValue();
@@ -105,7 +110,7 @@ export class HostServer {
         oldest.listeners.dequeue()();
       }
 
-      console.log(`host closed: ${oldest.hid}`);
+      (opts?.logger ?? this.logger).info(`host closed: ${oldest.hid}`);
     }
   }
 
