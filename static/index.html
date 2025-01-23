@@ -52,7 +52,7 @@
             ),
           );
 
-          const href = `${window.location.origin}/?hid=${encodeURIComponent(hid)}&pubkey=${bytesToBase64(await dh.publicKey)}`;
+          const href = `${window.location.origin}${window.location.pathname}?hid=${encodeURIComponent(hid)}&pubkey=${bytesToBase64(await dh.publicKey)}`;
           const div = document.createElement("p");
           const link = document.createElement("a");
           link.href = href;
