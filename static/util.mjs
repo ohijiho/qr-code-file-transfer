@@ -1,7 +1,8 @@
 export function uint8Array(x) {
   if (x instanceof ArrayBuffer) return new Uint8Array(x);
-  if (ArrayBuffer.isView(x)) return new Uint8Array(x.buffer, x.byteOffset, x.byteLength);
-  throw new Error('invalid chunk');
+  if (ArrayBuffer.isView(x))
+    return new Uint8Array(x.buffer, x.byteOffset, x.byteLength);
+  throw new Error("invalid chunk");
 }
 
 export const textEncoder = new TextEncoder();
@@ -74,7 +75,9 @@ export function base64ToBytes(base64) {
 }
 
 export function bytesToBase64(bytes) {
-  const binString = Array.from(uint8Array(bytes), (x) => String.fromCharCode(x)).join("");
+  const binString = Array.from(uint8Array(bytes), (x) =>
+    String.fromCharCode(x),
+  ).join("");
   return btoa(binString);
 }
 

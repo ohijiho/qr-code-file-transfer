@@ -1,10 +1,10 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" />
     <title>QR Code File Transfer</title>
-    <script src="/vendor/qrcode.min.js"></script>
-    <script src="/vendor/StreamSaver.js"></script>
+    <script src="./vendor/qrcode.min.js"></script>
+    <script src="./vendor/StreamSaver.js"></script>
   </head>
   <body>
     <a href="https://github.com/ohijiho/qr-code-file-transfer">What's this?</a>
@@ -15,138 +15,163 @@
     </form>
 
     <script type="module">
-    import {
-      textEncoder, textDecoder, base64ToBytes, bytesToBase64, readAll,
-    } from '/util.mjs';
-    import { ToUint8ArrayStream, ThroughputStream } from '/stream.mjs';
-    import { DH } from '/crypto.mjs';
-    import { Host, Relay } from '/api.mjs';
-    import { ControlSocket } from '/main.mjs';
+      import {
+        textEncoder,
+        textDecoder,
+        base64ToBytes,
+        bytesToBase64,
+        readAll,
+      } from "./util.mjs";
+      import { ToUint8ArrayStream, ThroughputStream } from "./stream.mjs";
+      import { DH } from "./crypto.mjs";
+      import { Host, Relay } from "./api.mjs";
+      import { ControlSocket } from "./main.mjs";
 
-    (async () => {
-      const input = document.getElementById('input');
-      const output = document.getElementById('output');
+      (async () => {
+        const input = document.getElementById("input");
+        const output = document.getElementById("output");
 
-      function log(msg) {
-        const text = document.createElement('p');
-        text.innerText = msg;
-        output.appendChild(text);
-      }
+        function log(msg) {
+          const text = document.createElement("p");
+          text.innerText = msg;
+          output.appendChild(text);
+        }
 
-      document.forms[0].addEventListener('submit', (e) => {
-        e.preventDefault();
-      });
+        document.forms[0].addEventListener("submit", (e) => {
+          e.preventDefault();
+        });
 
-      const dh = new DH();
+        const dh = new DH();
 
-      async function listen() {
-        const hid = await Host.open();
+        async function listen() {
+          const hid = await Host.open();
 
-        const pw = btoa([...window.crypto.getRandomValues(new Uint8Array(24))].map((x) => String.fromCharCode(x)));
+          const pw = btoa(
+            [...window.crypto.getRandomValues(new Uint8Array(24))].map((x) =>
+              String.fromCharCode(x),
+            ),
+          );
 
-        const href = `${window.location.origin}/?hid=${encodeURIComponent(hid)}&pubkey=${bytesToBase64(await dh.publicKey)}`;
-        const div = document.createElement('p');
-        const link = document.createElement('a');
-        link.href = href;
-        link.innerText = 'connect';
-        div.appendChild(link);
-        output.appendChild(div);
+          const href = `${window.location.origin}/?hid=${encodeURIComponent(hid)}&pubkey=${bytesToBase64(await dh.publicKey)}`;
+          const div = document.createElement("p");
+          const link = document.createElement("a");
+          link.href = href;
+          link.innerText = "connect";
+          div.appendChild(link);
+          output.appendChild(div);
 
-        const qrcode = document.createElement('p');
-        new QRCode(qrcode, href);
-        output.appendChild(qrcode);
+          const qrcode = document.createElement("p");
+          new QRCode(qrcode, href);
+          output.appendChild(qrcode);
 
-        try {
+          try {
+            for (;;) {
+              const d = await Host.accept(hid);
+
+              if (d.ok) {
+                return {
+                  loc: d.location,
+                  pk: base64ToBytes(d.message),
+                };
+              }
+            }
+          } catch (e) {
+            switch (e.status) {
+              case 404:
+                break;
+              default:
+                throw e;
+            }
+          } finally {
+            try {
+              await Host.close(hid);
+            } catch (e) {}
+          }
+        }
+
+        const { loc, pk } = await (async () => {
+          const qm = new Map(
+            window.location.search
+              .substring(1)
+              .split("&")
+              .map((x) => {
+                const i = x.indexOf("=");
+                if (i === -1) return [x];
+                return [
+                  x.substring(0, i),
+                  decodeURIComponent(x.substring(i + 1)),
+                ];
+              }),
+          );
+
+          if (qm.has("hid")) {
+            const hid = qm.get("hid");
+            const loc = await Host.connect(
+              hid,
+              bytesToBase64(await dh.publicKey),
+            );
+            return {
+              loc,
+              pk: base64ToBytes(qm.get("pubkey")),
+            };
+          }
+
           for (;;) {
-            const d = await Host.accept(hid);
-
-            if (d.ok) {
-              return {
-                loc: d.location,
-                pk: base64ToBytes(d.message),
-              };
+            const d = await listen();
+            if (d) {
+              return d;
             }
           }
-        } catch (e) {
-          switch (e.status) {
-          case 404:
-            break;
-          default:
-            throw e;
-          }
-        } finally {
-          try {
-            await Host.close(hid);
-          } catch (e) {}
-        }
-      }
+        })();
 
-      const { loc, pk } = await (async () => {
-        const qm = new Map(window.location.search.substring(1).
-          split('&').map((x) => {
-            const i = x.indexOf('=');
-            if (i === -1) return [x];
-            return [x.substring(0, i), decodeURIComponent(x.substring(i + 1))];
-          }));
+        log("connecting...");
 
-        if (qm.has('hid')) {
-          const hid = qm.get('hid');
-          const loc = await Host.connect(hid, bytesToBase64(await dh.publicKey));
-          return {
-            loc,
-            pk: base64ToBytes(qm.get('pubkey')),
-          };
-        }
+        await Relay.open(loc);
+
+        const s = new ControlSocket(loc, dh, pk);
+        await s.start();
+
+        log("established");
+
+        input.disabled = false;
+
+        document.forms[0].addEventListener("submit", async () => {
+          if (!loc) return;
+
+          const len = input.files.length;
+
+          await Promise.all(
+            [...input.files].map(async (file) => {
+              const { fileSent, checksumSent } = await s.sendFile(
+                { name: file.name },
+                file.stream(),
+              );
+              await Promise.all([fileSent, checksumSent]);
+            }),
+          );
+
+          log(`sent ${len} files`);
+        });
 
         for (;;) {
-          const d = await listen();
-          if (d) {
-            return d;
-          }
+          const { metadata, readable } = await s.recvFile();
+
+          const fileStream = streamSaver.createWriteStream(metadata.name);
+
+          log(`receiving file: ${metadata.name}`);
+          const text = document.createElement("p");
+          output.appendChild(text);
+
+          readable
+            .pipeThrough(
+              new ThroughputStream(({ size, throughput }) => {
+                text.innerText = `${(size * 1e-6).toFixed(2)}MB, ${(throughput * 1e-6).toFixed(2)}MB/s`;
+              }),
+            )
+            .pipeThrough(new ToUint8ArrayStream())
+            .pipeTo(fileStream);
         }
       })();
-
-      log('connecting...');
-
-      await Relay.open(loc);
-
-      const s = new ControlSocket(loc, dh, pk);
-      await s.start();
-
-      log('established');
-
-      input.disabled = false;
-
-      document.forms[0].addEventListener('submit', async () => {
-        if (!loc) return;
-
-        const len = input.files.length;
-
-        await Promise.all([...input.files].map(async (file) => {
-          const { fileSent, checksumSent } = await s.sendFile({ name: file.name }, file.stream());
-          await Promise.all([fileSent, checksumSent]);
-        }));
-
-        log(`sent ${len} files`);
-      });
-
-      for (;;) {
-        const { metadata, readable } = await s.recvFile();
-
-        const fileStream = streamSaver.createWriteStream(metadata.name);
-
-        log(`receiving file: ${metadata.name}`);
-        const text = document.createElement('p');
-        output.appendChild(text);
-
-        readable.
-          pipeThrough(new ThroughputStream(({ size, throughput }) => {
-            text.innerText = `${(size * 1e-6).toFixed(2)}MB, ${(throughput * 1e-6).toFixed(2)}MB/s`;
-          })).
-          pipeThrough(new ToUint8ArrayStream()).
-          pipeTo(fileStream);
-      }
-    })();
     </script>
   </body>
 </html>

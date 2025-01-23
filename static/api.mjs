@@ -1,4 +1,4 @@
-import { uint8Array } from '/util.mjs';
+import { uint8Array } from "./util.mjs";
 
 class HTTPError extends Error {
   constructor(res, msg) {
@@ -10,21 +10,26 @@ class HTTPError extends Error {
 
 async function postRaw(uri, body, contentType, opts) {
   const res = await fetch(uri, {
-    method: 'POST',
+    method: "POST",
     body,
     ...opts,
     headers: {
-      'Content-Type': contentType,
+      "Content-Type": contentType,
       ...opts?.headers,
     },
-    duplex: 'half',
+    duplex: "half",
   });
   if (!res.ok) throw new HTTPError(res);
   return res;
 }
 
 async function post(uri, body, opts) {
-  const res = await postRaw(uri, JSON.stringify(body ?? {}), 'application/json', opts);
+  const res = await postRaw(
+    uri,
+    JSON.stringify(body ?? {}),
+    "application/json",
+    opts,
+  );
   return res.json();
 }
 
@@ -36,14 +41,13 @@ async function get(uri, opts) {
 
 export const Host = {
   async open() {
-    return (await post('/api/host/open')).hid;
+    return (await post("/api/host/open")).hid;
   },
   async accept(hid) {
     return post(`/api/host/accept/${hid}`);
   },
   async connect(hid, message) {
-    if (!hid)
-      return (await post(`/api/host/connect`, {})).location;
+    if (!hid) return (await post(`/api/host/connect`, {})).location;
     return (await post(`/api/host/connect/${hid}`, { message })).location;
   },
   async close(hid) {
@@ -52,7 +56,7 @@ export const Host = {
 };
 
 async function recvResponse(loc) {
-  return postRaw(`${loc}/recv`, new ArrayBuffer(), 'application/octet-stream');
+  return postRaw(`${loc}/recv`, new ArrayBuffer(), "application/octet-stream");
 }
 
 export const Relay = {
@@ -60,7 +64,7 @@ export const Relay = {
     await post(`${loc}/open`);
   },
   async send(loc, data) {
-    await postRaw(`${loc}/send`, data, 'application/octet-stream');
+    await postRaw(`${loc}/send`, data, "application/octet-stream");
   },
   async recvStream(loc) {
     return (await recvResponse(loc)).body;
@@ -147,7 +151,7 @@ export class RelayReadableStream extends ReadableStream {
           controller.enqueue(value);
           empty = false;
         }
-        if (empty && await Relay.isClosed(loc)) {
+        if (empty && (await Relay.isClosed(loc))) {
           controller.close();
         }
       },

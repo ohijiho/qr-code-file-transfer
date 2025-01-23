@@ -1,4 +1,4 @@
-import { uint8Array, textEncoder, textDecoder } from '/util.mjs';
+import { uint8Array, textEncoder, textDecoder } from "./util.mjs";
 
 export class ByteSplitStream extends TransformStream {
   constructor(byte) {
@@ -22,19 +22,29 @@ export class ByteSplitStream extends TransformStream {
             b.set(x, off);
             off += x.byteLength;
           }
-          b.set(off, new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteOffset + i));
+          b.set(
+            off,
+            new Uint8Array(
+              chunk.buffer,
+              chunk.byteOffset,
+              chunk.byteOffset + i,
+            ),
+          );
           controller.enqueue(b);
           buf.splice(0, buf.length);
           len = 0;
 
-          chunk = new Uint8Array(chunk.buffer, chunk.byteOffset + i + 1, chunk.byteLength - i - 1);
+          chunk = new Uint8Array(
+            chunk.buffer,
+            chunk.byteOffset + i + 1,
+            chunk.byteLength - i - 1,
+          );
         }
       },
       flush(controller) {
-        if (buf.length !== 0)
-          controller.enqueue(buf[0]);
+        if (buf.length !== 0) controller.enqueue(buf[0]);
       },
-    })
+    });
   }
 }
 
@@ -57,7 +67,7 @@ export class NullSeparatedJSONStringifyStream extends TransformStream {
         controller.enqueue(textEncoder.encode(JSON.stringify(chunk)));
         controller.enqueue(new Uint8Array(1));
       },
-    })
+    });
   }
 }
 
@@ -77,7 +87,7 @@ class ChunkwiseChecksumStream extends WritableStream {
         const b = new Uint8Array(d.byteLength + chunk.byteLength);
         b.set(d, 0);
         b.set(chunk, d.byteLength);
-        d = await window.crypto.subtle.digest('SHA-256', b);
+        d = await window.crypto.subtle.digest("SHA-256", b);
       },
       close(controller) {
         setResult(d);
@@ -111,7 +121,11 @@ class SlicingStream extends TransformStream {
           const rem = bs - off;
           b.set(new Uint8Array(chunk.buffer, chunk.byteOffset, rem), off);
           controller.enqueue(b);
-          chunk = new Uint8Array(chunk.buffer, chunk.byteOffset + rem, chunk.byteLength - rem);
+          chunk = new Uint8Array(
+            chunk.buffer,
+            chunk.byteOffset + rem,
+            chunk.byteLength - rem,
+          );
           totalLen -= bs;
           buf.splice(0, buf.length);
         }
@@ -126,7 +140,7 @@ class SlicingStream extends TransformStream {
         }
         controller.enqueue(b);
       },
-    })
+    });
   }
 }
 
@@ -136,7 +150,7 @@ export class ChecksumStream {
     const cw = new ChunkwiseChecksumStream();
     st.readable.pipeTo(cw);
 
-    Object.defineProperty(st.writable, 'digest', {
+    Object.defineProperty(st.writable, "digest", {
       value: cw.digest,
       writable: false,
     });
@@ -186,6 +200,6 @@ export class ThroughputStream extends TransformStream {
   }
 
   get throughput() {
-    return this.#size / (new Date().getTime() - this.#t0) * 1000;
+    return (this.#size / (new Date().getTime() - this.#t0)) * 1000;
   }
 }
