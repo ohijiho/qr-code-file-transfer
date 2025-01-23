@@ -41,17 +41,17 @@ async function get(uri, opts) {
 
 export const Host = {
   async open() {
-    return (await post("/api/host/open")).hid;
+    return (await post("./api/host/open")).hid;
   },
   async accept(hid) {
-    return post(`/api/host/accept/${hid}`);
+    return post(`./api/host/accept/${hid}`);
   },
   async connect(hid, message) {
-    if (!hid) return (await post(`/api/host/connect`, {})).location;
-    return (await post(`/api/host/connect/${hid}`, { message })).location;
+    if (!hid) return (await post(`./api/host/connect`, {})).location;
+    return (await post(`./api/host/connect/${hid}`, { message })).location;
   },
   async close(hid) {
-    await post(`/api/host/close/${hid}`);
+    await post(`./api/host/close/${hid}`);
   },
 };
 
