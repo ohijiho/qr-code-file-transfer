@@ -166,7 +166,7 @@ export class RelayServer {
       }
       this.#deleteSock(oldest.id, [...oldest.socks.values()][0]);
 
-      (opts?.logger ?? logger).info(`socket closed: ${oldest.id}`);
+      (opts?.logger ?? this.logger).info(`socket closed: ${oldest.id}`);
     }
   }
 
